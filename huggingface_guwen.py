@@ -156,12 +156,16 @@ class BlastFurnace():
         return example
 
     def valid_module(self, dataset):
+        acc_num = [0 for i in range(5)]
+        type_num = [0 for i in range(5)]
+        error_list = []
         self.model.eval()
         metric = load_metric("accuracy", cache_dir=hugging_face_dir)
         for example in tqdm(dataset):
             batch = example['features']
             batch = {k: v.to(self.device) for k, v in batch.items()}
             co_set = get_co_subset(example['translation'], example['choices'])
+            label = example['answer']
             with torch.no_grad():
                 outputs = self.model(**batch)
                 logits = outputs.logits[:,1]
@@ -170,8 +174,17 @@ class BlastFurnace():
                     predictions[idx]+=10
                 predictions = torch.argmax(predictions, dim=0)
                 prediction = predictions.item()
-            metric.add(prediction=prediction, reference=example['answer'])
+            type_num[len(co_set)]+=1.0
+            if prediction == label:
+                acc_num[len(co_set)]+=1.0
+            else:
+                error_list.append('translation:{}, choices:{}, answer:{}, candidate:{}'.format(example['translation']
+                    , example['choices'], label, co_set))
+            metric.add(prediction=prediction, reference=label)
         metric_value = metric.compute()
+        for i in range(1,5):
+            if type_num[i] > 0:
+                acc_num[i]/=type_num[i]
         print(metric_value)
 
     def test_module(self, dataset):
